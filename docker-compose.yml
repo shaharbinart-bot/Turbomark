@@ -230,6 +230,66 @@ services:
     volumes:
       - ./deploy:/app/deploy
       - /var/run/docker.sock:/var/run/docker.sock  # for docker commands
+       # Database Backup Service
+  backup-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: node ../backup/database-backup.js
+    environment:
+      - NODE_ENV=production
+      - POSTGRES_DB=turbomarketing
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - BACKUP_S3_BUCKET=${BACKUP_S3_BUCKET}
+      - MONITOR_EMAIL=${MONITOR_EMAIL}
+      - MONITOR_PASSWORD=${MONITOR_PASSWORD}
+    depends_on:
+      - postgres
+      - redis
+      - deployment-webhook
+    networks:
+      - turbomarketing-network
+    restart: unless-stopped
+    volumes:
+      - ./backup:/app/backup
+      - ./backups:/app/backups
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  # Rollback Management Service
+  rollback-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: node ../backup/rollback-system.js
+    environment:
+      - NODE_ENV=production
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - BACKUP_S3_BUCKET=${BACKUP_S3_BUCKET}
+      - MONITOR_EMAIL=${MONITOR_EMAIL}
+      - MONITOR_PASSWORD=${MONITOR_PASSWORD}
+    depends_on:
+      - postgres
+      - redis
+      - backup-service
+    networks:
+      - turbomarketing-network
+    restart: unless-stopped
+    volumes:
+      - ./backup:/app/backup
+      - ./backups:/app/backups
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "9002:9002"
+
 
   # Monitoring & Analytics
   prometheus:
