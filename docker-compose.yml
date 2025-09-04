@@ -211,6 +211,25 @@ services:
     networks:
       - turbomarketing-network
     restart: unless-stopped
+    # Deployment Webhook Handler
+  deployment-webhook:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: node ../deploy/webhook-handler.js
+    ports:
+      - "9000:9000"
+    environment:
+      - NODE_ENV=production
+      - WEBHOOK_PORT=9000
+    depends_on:
+      - external-monitor
+    networks:
+      - turbomarketing-network
+    restart: unless-stopped
+    volumes:
+      - ./deploy:/app/deploy
+      - /var/run/docker.sock:/var/run/docker.sock  # for docker commands
 
   # Monitoring & Analytics
   prometheus:
