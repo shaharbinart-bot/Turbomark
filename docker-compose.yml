@@ -20,7 +20,7 @@ services:
   # Backend API (Node.js/TypeScript)
   backend:
     build:
-      context: ./backend
+      context: ./backend/src
       dockerfile: Dockerfile
     ports:
       - "5000:5000"
@@ -121,28 +121,7 @@ services:
   # Background Job Processing
   worker:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
-    command: npm run worker
-    environment:
-      - NODE_ENV=production
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/turbomarketing
-      - REDIS_URL=redis://redis:6379
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
-    depends_on:
-      - postgres
-      - redis
-    networks:
-      - turbomarketing-network
-    restart: unless-stopped
-    deploy:
-      replicas: 3
-       # Background Job Processing
-  worker:
-    build:
-      context: ./backend
+      context: ./backend/src
       dockerfile: Dockerfile
     command: npm run worker
     environment:
@@ -164,9 +143,9 @@ services:
   # Health Monitoring Service
   monitor:
     build:
-      context: ./backend
+      context: ./backend/src
       dockerfile: Dockerfile
-    command: node src/monitor.js
+    command: node monitor.js
     environment:
       - NODE_ENV=production
       - MONITOR_EMAIL=${MONITOR_EMAIL}
@@ -178,12 +157,13 @@ services:
     networks:
       - turbomarketing-network
     restart: unless-stopped
-    # Business Intelligence Monitor
+
+  # Business Intelligence Monitor
   business-monitor:
     build:
-      context: ./backend
+      context: ./backend/src
       dockerfile: Dockerfile
-    command: node src/business-monitor.js
+    command: node business-monitor.js
     environment:
       - NODE_ENV=production
       - MONITOR_EMAIL=${MONITOR_EMAIL}
@@ -194,12 +174,13 @@ services:
     networks:
       - turbomarketing-network
     restart: unless-stopped
-    # External Uptime Monitor  
+
+  # External Uptime Monitor  
   external-monitor:
     build:
-      context: ./backend
+      context: ./backend/src
       dockerfile: Dockerfile
-    command: node src/external-monitor.js
+    command: node external-monitor.js
     environment:
       - NODE_ENV=production
       - TURBOMARK_DOMAIN=${TURBOMARK_DOMAIN:-your-domain.com}
@@ -211,12 +192,13 @@ services:
     networks:
       - turbomarketing-network
     restart: unless-stopped
-    # Deployment Webhook Handler
+
+  # Deployment Webhook Handler
   deployment-webhook:
     build:
-      context: ./backend
+      context: ./backend/src
       dockerfile: Dockerfile
-    command: node ../deploy/webhook-handler.js
+    command: node ../../deploy/webhook-handler.js
     ports:
       - "9000:9000"
     environment:
@@ -229,13 +211,14 @@ services:
     restart: unless-stopped
     volumes:
       - ./deploy:/app/deploy
-      - /var/run/docker.sock:/var/run/docker.sock  # for docker commands
-       # Database Backup Service
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  # Database Backup Service
   backup-service:
     build:
-      context: ./backend
+      context: ./backend/src
       dockerfile: Dockerfile
-    command: node ../backup/database-backup.js
+    command: node ../../backup/database-backup.js
     environment:
       - NODE_ENV=production
       - POSTGRES_DB=turbomarketing
@@ -263,9 +246,9 @@ services:
   # Rollback Management Service
   rollback-service:
     build:
-      context: ./backend
+      context: ./backend/src
       dockerfile: Dockerfile
-    command: node ../backup/rollback-system.js
+    command: node ../../backup/rollback-system.js
     environment:
       - NODE_ENV=production
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -289,7 +272,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "9002:9002"
-
 
   # Monitoring & Analytics
   prometheus:
@@ -325,4 +307,4 @@ volumes:
 
 networks:
   turbomarketing-network:
-    driver: bridge
+    driver: bridg
