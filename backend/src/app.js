@@ -32,6 +32,9 @@ app.get('/api/status', (req, res) => {
     ]
   });
 });
+// business metrics routes
+const businessMetrics = require('./business-metrics');
+app.use('/api/business', businessMetrics);
 
 // Revenue tracking endpoint
 app.get('/api/revenue', (req, res) => {
