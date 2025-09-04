@@ -139,6 +139,45 @@ services:
     restart: unless-stopped
     deploy:
       replicas: 3
+       # Background Job Processing
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: npm run worker
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/turbomarketing
+      - REDIS_URL=redis://redis:6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - turbomarketing-network
+    restart: unless-stopped
+    deploy:
+      replicas: 3
+
+  # Health Monitoring Service
+  monitor:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: node src/monitor.js
+    environment:
+      - NODE_ENV=production
+      - MONITOR_EMAIL=${MONITOR_EMAIL}
+      - MONITOR_PASSWORD=${MONITOR_PASSWORD}
+    depends_on:
+      - backend
+      - ai-engine
+      - frontend
+    networks:
+      - turbomarketing-network
+    restart: unless-stopped
 
   # Monitoring & Analytics
   prometheus:
