@@ -120,6 +120,47 @@ async function sendAlert(issues, performanceMetrics, serviceResults) {
   });
 }
 
+// Enhanced deployment with environment management
+async function runDeploymentWithEnvironments() {
+  console.log('🚀 starting enhanced turbomark deployment with environment management...');
+  
+  try {
+    // step 1: pull latest code
+    const gitResult = runCommand('git pull origin main', cwd=REPO_DIR);
+    
+    // step 2: run environment orchestrator pipeline
+    const deployResult = runCommand('node deploy/environment-orchestrator.js pipeline', cwd=REPO_DIR);
+    
+    if (deployResult.includes('deployment pipeline completed')) {
+      return {
+        'status': 'success',
+        'deployment_type': 'environment_pipeline',
+        'git_output': gitResult,
+        'staging_deployed': true,
+        'production_deployed': true,
+        'environment_orchestrator': 'active',
+        'pipeline_output': deployResult
+      };
+    } else {
+      throw new Error('Environment deployment pipeline failed');
+    }
+    
+  } catch (error) {
+    // fallback to single environment deployment
+    console.log('⚠️ environment pipeline failed, falling back to single deployment...');
+    
+    const fallbackResult = runCommand('docker-compose down && docker-compose up -d', cwd=REPO_DIR);
+    
+    return {
+      'status': 'fallback_success',
+      'deployment_type': 'single_environment',
+      'error': str(error),
+      'fallback_output': fallbackResult
+    };
+  }
+}
+
+
 // comprehensive health and performance check
 async function runMonitoring() {
   console.log('🔍 running turbomark health & performance checks...');
