@@ -1,0 +1,234 @@
+version: '3.8'
+
+services:
+  # Frontend (React/TypeScript) - Staging
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3000"  # different port for staging
+    environment:
+      - REACT_APP_API_URL=http://backend:5000
+      - REACT_APP_WS_URL=ws://backend:5000
+      - REACT_APP_ENVIRONMENT=staging
+    depends_on:
+      - backend
+    networks:
+      - turbomarketing-staging-network
+    restart: unless-stopped
+
+  # Backend API (Node.js/TypeScript) - Staging
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5000"  # different port for staging
+    environment:
+      - NODE_ENV=staging
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres-staging:5432/turbomarketing_staging
+      - REDIS_URL=redis://redis-staging:6379
+      - JWT_SECRET=${JWT_SECRET}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
+      - ENVIRONMENT=staging
+      - STAGING_MODE=true
+    depends_on:
+      - postgres-staging
+      - redis-staging
+      - ai-engine
+    networks:
+      - turbomarketing-staging-network
+    restart: unless-stopped
+    volumes:
+      - ./logs:/app/logs
+
+  # AI Engine (Python/FastAPI) - Staging
+  ai-engine:
+    build:
+      context: ./ai-engine
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8000"  # different port for staging
+    environment:
+      - ENVIRONMENT=staging
+      - REDIS_URL=redis://redis-staging:6379
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres-staging:5432/turbomarketing_staging
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
+      - MODEL_CACHE_DIR=/app/model_cache
+    depends_on:
+      - postgres-staging
+      - redis-staging
+    networks:
+      - turbomarketing-staging-network
+    restart: unless-stopped
+    volumes:
+      - model_cache_staging:/app/model_cache
+      - ./ai-engine/logs:/app/logs
+
+  # PostgreSQL Database - Staging
+  postgres-staging:
+    image: postgres:15-alpine
+    ports:
+      - "5433:5432"  # different port for staging
+    environment:
+      - POSTGRES_DB=turbomarketing_staging
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_staging_data:/var/lib/postgresql/data
+      - ./database/schemas:/docker-entrypoint-initdb.d
+    networks:
+      - turbomarketing-staging-network
+    restart: unless-stopped
+
+  # Redis for caching and sessions - Staging
+  redis-staging:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"  # different port for staging
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_staging_data:/data
+    networks:
+      - turbomarketing-staging-network
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy & Load Balancer - Staging
+  nginx-staging:
+    image: nginx:alpine
+    ports:
+      - "8080:80"   # different port for staging
+      - "8443:443"  # different port for staging
+    volumes:
+      - ./config/nginx.staging.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+      - nginx_staging_logs:/var/log/nginx
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - turbomarketing-staging-network
+    restart: unless-stopped
+
+  # Background Job Processing - Staging
+  worker-staging:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: npm run worker
+    environment:
+      - NODE_ENV=staging
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres-staging:5432/turbomarketing_staging
+      - REDIS_URL=redis://redis-staging:6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
+      - ENVIRONMENT=staging
+    depends_on:
+      - postgres-staging
+      - redis-staging
+    networks:
+      - turbomarketing-staging-network
+    restart: unless-stopped
+    deploy:
+      replicas: 1  # fewer replicas for staging
+
+  # Health Monitoring Service - Staging
+  monitor-staging:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: node src/monitor.js
+    environment:
+      - NODE_ENV=staging
+      - MONITOR_EMAIL=${MONITOR_EMAIL}
+      - MONITOR_PASSWORD=${MONITOR_PASSWORD}
+      - ENVIRONMENT=staging
+    depends_on:
+      - backend
+      - ai-engine
+      - frontend
+    networks:
+      - turbomarketing-staging-network
+    restart: unless-stopped
+
+  # Business Intelligence Monitor - Staging
+  business-monitor-staging:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: node src/business-monitor.js
+    environment:
+      - NODE_ENV=staging
+      - MONITOR_EMAIL=${MONITOR_EMAIL}
+      - MONITOR_PASSWORD=${MONITOR_PASSWORD}
+      - ENVIRONMENT=staging
+    depends_on:
+      - backend
+      - monitor-staging
+    networks:
+      - turbomarketing-staging-network
+    restart: unless-stopped
+
+  # External Uptime Monitor - Staging
+  external-monitor-staging:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: node src/external-monitor.js
+    environment:
+      - NODE_ENV=staging
+      - TURBOMARK_DOMAIN=staging.turbomark.com
+      - MONITOR_EMAIL=${MONITOR_EMAIL}
+      - MONITOR_PASSWORD=${MONITOR_PASSWORD}
+      - ENVIRONMENT=staging
+    depends_on:
+      - backend
+      - business-monitor-staging
+    networks:
+      - turbomarketing-staging-network
+    restart: unless-stopped
+
+  # Monitoring & Analytics - Staging
+  prometheus-staging:
+    image: prom/prometheus
+    ports:
+      - "9091:9090"  # different port for staging
+    volumes:
+      - ./config/prometheus.staging.yml:/etc/prometheus/prometheus.yml
+      - prometheus_staging_data:/prometheus
+    networks:
+      - turbomarketing-staging-network
+    restart: unless-stopped
+
+  grafana-staging:
+    image: grafana/grafana
+    ports:
+      - "3002:3000"  # different port for staging
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+    volumes:
+      - grafana_staging_data:/var/lib/grafana
+    networks:
+      - turbomarketing-staging-network
+    restart: unless-stopped
+
+volumes:
+  postgres_staging_data:
+  redis_staging_data:
+  model_cache_staging:
+  nginx_staging_logs:
+  prometheus_staging_data:
+  grafana_staging_data:
+
+networks:
+  turbomarketing-staging-network:
+    driver: bridge
